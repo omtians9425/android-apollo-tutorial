@@ -15,8 +15,9 @@ import com.auth0.android.callback.BaseCallback
 import com.auth0.android.provider.AuthCallback
 import com.auth0.android.provider.WebAuthProvider
 import com.auth0.android.result.Credentials
+import com.hasura.todo.Todo.network.Network
 
-class Login : AppCompatActivity(){
+class Login : AppCompatActivity() {
 
     private var auth0: Auth0? = null
     private val credentialsManager: SecureCredentialsManager? = null
@@ -26,42 +27,48 @@ class Login : AppCompatActivity(){
      * Refer to SecureCredentialsManager#requireAuthentication method for more information.
      */
     companion object {
-        private val CODE_DEVICE_AUTHENTICATION = 22
-        val KEY_CLEAR_CREDENTIALS = "com.auth0.CLEAR_CREDENTIALS"
+        private const val CODE_DEVICE_AUTHENTICATION = 22
+        const val KEY_CLEAR_CREDENTIALS = "com.auth0.CLEAR_CREDENTIALS"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         //Setup CredentialsManager
         auth0 = Auth0(this)
-        auth0?.setLoggingEnabled(true)
-        auth0?.setOIDCConformant(true)
+        auth0?.isLoggingEnabled = true
+        auth0?.isOIDCConformant = true
 
         //Optional - Uncomment the next line to use:
         //Require device authentication before obtaining the credentials
-        credentialsManager?.requireAuthentication(this, CODE_DEVICE_AUTHENTICATION, getString(R.string.request_credentials_title), null);
+        credentialsManager?.requireAuthentication(
+            this,
+            CODE_DEVICE_AUTHENTICATION,
+            getString(R.string.request_credentials_title),
+            null
+        );
 
         // Check if the activity was launched after a logout
-        if (getIntent().getBooleanExtra(KEY_CLEAR_CREDENTIALS, false)) {
+        if (intent.getBooleanExtra(KEY_CLEAR_CREDENTIALS, false)) {
             credentialsManager?.clearCredentials()
         }
 
         setContentView(R.layout.activity_login)
 
         // Check if a log in button must be shown
-        if ( credentialsManager == null) {
-            val loginButton = findViewById(R.id.loginButton) as Button
-            loginButton.setOnClickListener(object : View.OnClickListener {
-                override fun onClick(v: View) {
-                    doLogin()
-                }
-            })
+        if (credentialsManager == null) {
+            val loginButton = findViewById<Button>(R.id.loginButton)
+            loginButton.setOnClickListener { doLogin() }
             return
         }
 
         // Obtain the existing credentials and move to the next activity
-        credentialsManager.getCredentials(object : BaseCallback<Credentials, CredentialsManagerException> {
+        credentialsManager.getCredentials(object :
+            BaseCallback<Credentials, CredentialsManagerException> {
             override fun onSuccess(credentials: Credentials) {
+                // set Apollo Client: use authorized info
+                val network = Network()
+                network.setApolloClient(credentials.idToken!!, application)
+                credentialsManager.saveCredentials(credentials)
                 showNextActivity()
             }
 
@@ -93,7 +100,12 @@ class Login : AppCompatActivity(){
     private fun doLogin() {
         WebAuthProvider.init(auth0!!)
             .withScheme("hasura")
-            .withAudience(String.format("https://%s/userinfo", getString(R.string.com_auth0_domain)))
+            .withAudience(
+                String.format(
+                    "https://%s/userinfo",
+                    getString(R.string.com_auth0_domain)
+                )
+            )
             .withScope("openid offline_access")
             .start(this, webCallback)
     }
@@ -105,7 +117,13 @@ class Login : AppCompatActivity(){
         }
 
         override fun onFailure(exception: AuthenticationException) {
-            runOnUiThread { Toast.makeText(this@Login, "Log In - Error Occurred", Toast.LENGTH_SHORT).show() }
+            runOnUiThread {
+                Toast.makeText(
+                    this@Login,
+                    "Log In - Error Occurred",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }
 
         override fun onSuccess(credentials: Credentials) {

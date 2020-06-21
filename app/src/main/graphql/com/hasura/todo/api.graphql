@@ -1,0 +1,5 @@
+query AllTodos {
+    todos {
+        title
+    }
+}

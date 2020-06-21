@@ -13,7 +13,7 @@ android {
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.hasura.todo.Todo"
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -42,6 +42,7 @@ apollo {
     customTypeMapping = [
             "timestampz" : "java.util.Date"
     ]
+    generateKotlinModels.set(true)
 }
 
 
