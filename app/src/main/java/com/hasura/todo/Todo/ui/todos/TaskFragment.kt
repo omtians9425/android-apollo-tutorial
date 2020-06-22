@@ -15,12 +15,9 @@ import com.apollographql.apollo.api.Response
 import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.fetcher.ApolloResponseFetchers
 import com.apollographql.apollo.fetcher.ResponseFetcher
-import com.hasura.todo.AddTodoMutation
-import com.hasura.todo.GetMyTodosQuery
-import com.hasura.todo.RemoveTodoMutation
+import com.hasura.todo.*
 import com.hasura.todo.Todo.R
 import com.hasura.todo.Todo.network.Network
-import com.hasura.todo.ToggleTodoMutation
 import kotlinx.android.synthetic.main.task_todos.*
 import kotlinx.android.synthetic.main.task_todos.view.*
 import java.util.*
@@ -33,6 +30,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
     private lateinit var addTodoMutation: AddTodoMutation
     private lateinit var toggleTodoMutation: ToggleTodoMutation
     private lateinit var removeTodoMutation: RemoveTodoMutation
+    private lateinit var clearCompletedMutation: ClearCompletedMutation
 
     private var completeStatus: String? = null
 
@@ -229,6 +227,25 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
             })
     }
 
+    private fun removeAllCompletedCloud(){
+        // Init Query
+        clearCompletedMutation = ClearCompletedMutation()
+        // Apollo runs query on background thread
+        Network.apolloClient.mutate(clearCompletedMutation)?.enqueue(object : ApolloCall.Callback<ClearCompletedMutation.Data>() {
+            override fun onFailure(error: ApolloException) {
+                Log.d("Todo", error.toString() )
+            }
+            override fun onResponse(response: Response<ClearCompletedMutation.Data>) {
+                // get data from local cache and update the list
+                val todos = listItems.filter { task -> task.is_completed }
+                Network.apolloClient
+                    .apolloStore
+                    .write(GetMyTodosQuery(), GetMyTodosQuery.Data(todos)).execute()
+                getMyTodosQueryLocal()
+            }
+        })
+    }
+
     override fun updateTaskCompleteStatus(taskId: Int, completeFlag: Boolean) {
         toggleTodoMutationCloud(taskId, completeFlag)
     }
@@ -264,7 +281,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
     }
 
     private fun removeAllCompleted() {
-        // Todo : Method for clearing all completed task at once
+        removeAllCompletedCloud()
     }
 
     override fun onAttach(context: Context?) {

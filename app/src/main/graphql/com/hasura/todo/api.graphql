@@ -36,3 +36,9 @@ mutation removeTodo ($id: Int!) {
         affected_rows
     }
 }
+
+mutation clearCompleted {
+    delete_todos(where: {is_completed: {_eq: true}, is_public: {_eq: false}}) {
+        affected_rows
+    }
+}
