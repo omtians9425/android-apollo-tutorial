@@ -18,8 +18,10 @@ import com.hasura.todo.AddTodoMutation
 import com.hasura.todo.GetMyTodosQuery
 import com.hasura.todo.Todo.R
 import com.hasura.todo.Todo.network.Network
+import com.hasura.todo.ToggleTodoMutation
 import kotlinx.android.synthetic.main.task_todos.*
 import kotlinx.android.synthetic.main.task_todos.view.*
+import java.util.*
 
 private const val COMPLETE_STATUS = "status"
 
@@ -27,8 +29,27 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
 
     private lateinit var getMyTodosQuery: GetMyTodosQuery
     private lateinit var addTodoMutation: AddTodoMutation
+    private lateinit var toggleTodoMutation: ToggleTodoMutation
 
     private var completeStatus: String? = null
+
+    companion object {
+        const val ALL = "ALL"
+        const val ACTIVE = "ACTIVE"
+        const val COMPLETED = "COMPLETED"
+        private var fragmentListener: FragmentListener? = null
+
+        var listItems: MutableList<GetMyTodosQuery.Todo> = mutableListOf()
+
+        @JvmStatic
+        fun newInstance(completeStatus: String): TaskFragment {
+            return TaskFragment().apply {
+                arguments = Bundle().apply {
+                    putString(COMPLETE_STATUS, completeStatus)
+                }
+            }
+        }
+    }
 
     interface FragmentListener {
         fun notifyDataSetChanged()
@@ -165,8 +186,46 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
             })
     }
 
+    private fun toggleTodoMutationCloud(todoId: Int, completeFlag: Boolean) {
+        toggleTodoMutation = ToggleTodoMutation(id = todoId, isCompleted = completeFlag)
+        getMyTodosQuery = GetMyTodosQuery()
+
+        val index = listItems.indexOfFirst { it.id == todoId }
+        val todos = listItems[index]
+        val todo = GetMyTodosQuery.Todo(
+            todos.__typename,
+            todos.id,
+            todos.title,
+            todos.created_at,
+            todos.is_completed
+        )
+
+        val updatedList = listItems.apply {
+            this[index] = todo
+        }
+
+        // optimistic cache
+        Network.apolloClient.apolloStore.writeOptimisticUpdatesAndPublish(
+            GetMyTodosQuery(), GetMyTodosQuery.Data(
+                mutableListOf(todo)
+            ), UUID.randomUUID()
+        ).execute()
+        getMyTodosQueryLocal()
+
+        // Apollo runs query on background thread
+        Network.apolloClient.mutate(toggleTodoMutation)?.enqueue(object : ApolloCall.Callback<ToggleTodoMutation.Data>() {
+            override fun onFailure(error: ApolloException) {
+                Log.d("Todo", error.toString() )
+            }
+            override fun onResponse(response: Response<ToggleTodoMutation.Data>) {
+                Network.apolloClient.apolloStore.write(toggleTodoMutation, response.data()!!)
+                getMyTodosQueryLocal()
+            }
+        })
+    }
+
     override fun updateTaskCompleteStatus(taskId: Int, completeFlag: Boolean) {
-        // Todo : Method for updating the complete status for the task
+        toggleTodoMutationCloud(taskId, completeFlag)
     }
 
     fun addTodo(title: String) {
@@ -179,24 +238,6 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
 
     private fun removeAllCompleted() {
         // Todo : Method for clearing all completed task at once
-    }
-
-    companion object {
-        const val ALL = "ALL"
-        const val ACTIVE = "ACTIVE"
-        const val COMPLETED = "COMPLETED"
-        private var fragmentListener: FragmentListener? = null
-
-        var listItems: MutableList<GetMyTodosQuery.Todo> = mutableListOf()
-
-        @JvmStatic
-        fun newInstance(completeStatus: String): TaskFragment {
-            return TaskFragment().apply {
-                arguments = Bundle().apply {
-                    putString(COMPLETE_STATUS, completeStatus)
-                }
-            }
-        }
     }
 
     override fun onAttach(context: Context?) {
