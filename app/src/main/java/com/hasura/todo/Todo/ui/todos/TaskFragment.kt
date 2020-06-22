@@ -2,13 +2,19 @@ package com.hasura.todo.Todo.ui.todos
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.apollographql.apollo.ApolloCall
+import com.apollographql.apollo.api.Response
+import com.apollographql.apollo.exception.ApolloException
+import com.hasura.todo.GetMyTodosQuery
 import com.hasura.todo.Todo.R
+import com.hasura.todo.Todo.network.Network
 import kotlinx.android.synthetic.main.task_todos.*
 import kotlinx.android.synthetic.main.task_todos.view.*
 
@@ -16,12 +22,15 @@ private const val COMPLETE_STATUS = "status"
 
 class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
 
+    private lateinit var getMyTodosQuery: GetMyTodosQuery
+
     private var completeStatus: String? = null
 
     interface FragmentListener {
         fun notifyDataSetChanged()
     }
-    var filteredListItems = listItems
+
+    private var filteredListItems = listItems
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,7 +46,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
         // Inflate the layout for this fragment
         val root = inflater.inflate(R.layout.task_todos, container, false)
         val removeAllCompleted: Button = root.removeAllCompleted
-        removeAllCompleted.setOnClickListener {removeAllCompleted()}
+        removeAllCompleted.setOnClickListener { removeAllCompleted() }
         return root
     }
 
@@ -45,6 +54,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
         super.onViewCreated(view, savedInstanceState)
         taskRecyclerView.layoutManager = LinearLayoutManager(activity)
         updateTabs()
+        getMyTodoQueryCloud()
     }
 
     fun refreshData() {
@@ -55,13 +65,13 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
         filteredListItems = listItems
         when (completeStatus) {
             ALL -> getFilteredData(filteredListItems)
-            ACTIVE -> getFilteredData(filteredListItems.filter { task -> !task.getCompleteStatus() } as MutableList<Task>)
-            COMPLETED -> getFilteredData(filteredListItems.filter { task -> task.getCompleteStatus() } as MutableList<Task>)
+            ACTIVE -> getFilteredData(filteredListItems.filter { task -> !task.is_completed } as MutableList<GetMyTodosQuery.Todo>)
+            COMPLETED -> getFilteredData(filteredListItems.filter { task -> task.is_completed } as MutableList<GetMyTodosQuery.Todo>)
         }
         taskRecyclerView.adapter?.notifyDataSetChanged()
     }
 
-    private fun getFilteredData(list: MutableList<Task>) {
+    private fun getFilteredData(list: MutableList<GetMyTodosQuery.Todo>) {
         if (list.isNotEmpty()) {
             emptyMessageTextView.visibility = View.INVISIBLE
             taskRecyclerView.visibility = View.VISIBLE
@@ -74,11 +84,29 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
             removeAllCompleted.visibility = View.INVISIBLE
             emptyMessageTextView.visibility = View.VISIBLE
             when (completeStatus) {
-                ACTIVE -> emptyMessageTextView.setText("No Active Tasks!")
-                COMPLETED -> emptyMessageTextView.setText("No Completed Tasks Yet!")
+                ACTIVE -> emptyMessageTextView.text = "No Active Tasks!"
+                COMPLETED -> emptyMessageTextView.text = "No Completed Tasks Yet!"
             }
             taskRecyclerView.visibility = View.INVISIBLE
         }
+    }
+
+    private fun getMyTodoQueryCloud() {
+        getMyTodosQuery = GetMyTodosQuery()
+        Network.apolloClient.query(getMyTodosQuery)
+            ?.enqueue(object : ApolloCall.Callback<GetMyTodosQuery.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    Log.d("Todo", e.toString())
+                }
+
+                override fun onResponse(response: Response<GetMyTodosQuery.Data>) {
+                    Log.d("Todo", response.data().toString())
+                    response.data()?.todos?.toMutableList()?.let {
+                        listItems = it
+                        activity?.runOnUiThread { updateTabs() }
+                    }
+                }
+            })
     }
 
     override fun updateTaskCompleteStatus(taskId: Int, completeFlag: Boolean) {
@@ -103,14 +131,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
         const val COMPLETED = "COMPLETED"
         private var fragmentListener: FragmentListener? = null
 
-        var listItems: MutableList<Task> = mutableListOf(
-            Task(1, "Private Task", false),
-            Task(2, "Private Task 1", false),
-            Task(3, "Private Task 2", false),
-            Task(4, "Private Task 3", false),
-            Task(5, "Private Task 4", true),
-            Task(6, "Private Task 5", false)
-        )
+        var listItems: MutableList<GetMyTodosQuery.Todo> = mutableListOf()
 
         @JvmStatic
         fun newInstance(completeStatus: String): TaskFragment {

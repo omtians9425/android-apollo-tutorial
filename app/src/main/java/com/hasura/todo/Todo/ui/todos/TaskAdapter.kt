@@ -7,11 +7,12 @@ import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.hasura.todo.GetMyTodosQuery
 import com.hasura.todo.Todo.R
 import kotlinx.android.synthetic.main.task_item.view.*
 
 class TaskAdapter(
-    private val taskList: MutableList<Task>,
+    private val taskList: MutableList<GetMyTodosQuery.Todo>,
     private val taskItemClickListener: TaskItemClickListener
 ) : RecyclerView.Adapter<TaskAdapter.TaskViewHolder>() {
 
@@ -31,16 +32,16 @@ class TaskAdapter(
     }
 
     override fun onBindViewHolder(holder: TaskViewHolder, position: Int) {
-        holder.taskName.text = taskList[position].getName()
-        holder.taskCompleteStatus.isChecked = taskList[position].getCompleteStatus()
+        holder.taskName.text = taskList[position].title
+        holder.taskCompleteStatus.isChecked = taskList[position].is_completed
 
         holder.taskDelete.setOnClickListener {
-            taskItemClickListener.delete(taskList[position].getId())
+            taskItemClickListener.delete(taskList[position].id)
         }
         holder.taskCompleteStatus.setOnClickListener {
 
             taskItemClickListener.updateTaskCompleteStatus(
-                taskList[position].getId(),
+                taskList[position].id,
                 holder.taskCompleteStatus.isChecked
             )
         }
