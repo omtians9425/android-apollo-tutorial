@@ -12,3 +12,15 @@ query getMyTodos {
         is_completed
     }
 }
+
+mutation addTodo($todo: String!, $isPublic: Boolean!) {
+  insert_todos(objects: [{ title: $todo, is_public: $isPublic }]) {
+    affected_rows
+    returning {
+      id
+      title
+      created_at
+      is_completed
+    }
+  }
+}

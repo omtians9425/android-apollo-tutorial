@@ -12,6 +12,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.apollographql.apollo.ApolloCall
 import com.apollographql.apollo.api.Response
 import com.apollographql.apollo.exception.ApolloException
+import com.apollographql.apollo.fetcher.ApolloResponseFetchers
+import com.apollographql.apollo.fetcher.ResponseFetcher
+import com.hasura.todo.AddTodoMutation
 import com.hasura.todo.GetMyTodosQuery
 import com.hasura.todo.Todo.R
 import com.hasura.todo.Todo.network.Network
@@ -23,6 +26,7 @@ private const val COMPLETE_STATUS = "status"
 class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
 
     private lateinit var getMyTodosQuery: GetMyTodosQuery
+    private lateinit var addTodoMutation: AddTodoMutation
 
     private var completeStatus: String? = null
 
@@ -96,14 +100,66 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
         Network.apolloClient.query(getMyTodosQuery)
             ?.enqueue(object : ApolloCall.Callback<GetMyTodosQuery.Data>() {
                 override fun onFailure(e: ApolloException) {
+                    Log.d("getMyTodosQuery", e.toString())
+                }
+
+                override fun onResponse(response: Response<GetMyTodosQuery.Data>) {
+                    Log.d("getMyTodosQuery", response.data().toString())
+                    response.data()?.todos?.toMutableList()?.let {
+                        listItems = it
+                        activity?.runOnUiThread { updateTabs() }
+                    }
+                }
+            })
+    }
+
+    private fun addTodoMutationCloud(title: String) {
+        // init query
+        addTodoMutation = AddTodoMutation(todo = title, isPublic = false)
+
+        Network.apolloClient.mutate(addTodoMutation)
+            .enqueue(object : ApolloCall.Callback<AddTodoMutation.Data>() {
+                override fun onFailure(e: ApolloException) {
+                    Log.d("addTodoMutation", e.toString())
+                }
+
+                override fun onResponse(response: Response<AddTodoMutation.Data>) {
+                    Log.d("addTodoMutation", response.data().toString())
+
+                    // create Data class instance from response
+                    val addedTodo = response.data()?.insert_todos?.returning?.get(0) ?: return
+                    val todo = GetMyTodosQuery.Todo(
+                        addedTodo.__typename,
+                        addedTodo.id,
+                        addedTodo.title,
+                        addedTodo.created_at,
+                        addedTodo.is_completed
+                    )
+                    // cache immediately
+                    Network.apolloClient.apolloStore.write(
+                        GetMyTodosQuery(), GetMyTodosQuery.Data(
+                            listOf(todo)
+                        )
+                    )
+                    getMyTodosQueryLocal()
+                }
+            })
+    }
+
+    private fun getMyTodosQueryLocal() {
+        getMyTodosQuery = GetMyTodosQuery()
+        Network.apolloClient.query(getMyTodosQuery)
+            .responseFetcher(ApolloResponseFetchers.CACHE_FIRST) // local first
+            .enqueue(object : ApolloCall.Callback<GetMyTodosQuery.Data>() {
+                override fun onFailure(e: ApolloException) {
                     Log.d("Todo", e.toString())
                 }
 
                 override fun onResponse(response: Response<GetMyTodosQuery.Data>) {
-                    Log.d("Todo", response.data().toString())
+                    Log.d("getMyTodosQueryLocal", "${response.data()?.todos}")
                     response.data()?.todos?.toMutableList()?.let {
                         listItems = it
-                        activity?.runOnUiThread { updateTabs() }
+                        requireActivity().runOnUiThread { updateTabs() }
                     }
                 }
             })
@@ -114,7 +170,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
     }
 
     fun addTodo(title: String) {
-        // Todo : Add method to update todos
+        addTodoMutationCloud(title)
     }
 
     override fun delete(taskId: Int) {
