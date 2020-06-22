@@ -30,3 +30,9 @@ mutation toggleTodo($id: Int!, $isCompleted: Boolean!) {
     affected_rows
   }
 }
+
+mutation removeTodo ($id: Int!) {
+    delete_todos(where: {id: {_eq: $id}}) {
+        affected_rows
+    }
+}

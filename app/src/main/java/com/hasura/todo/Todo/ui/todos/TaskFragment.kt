@@ -10,12 +10,14 @@ import android.widget.Button
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.apollographql.apollo.ApolloCall
+import com.apollographql.apollo.ApolloMutationCall
 import com.apollographql.apollo.api.Response
 import com.apollographql.apollo.exception.ApolloException
 import com.apollographql.apollo.fetcher.ApolloResponseFetchers
 import com.apollographql.apollo.fetcher.ResponseFetcher
 import com.hasura.todo.AddTodoMutation
 import com.hasura.todo.GetMyTodosQuery
+import com.hasura.todo.RemoveTodoMutation
 import com.hasura.todo.Todo.R
 import com.hasura.todo.Todo.network.Network
 import com.hasura.todo.ToggleTodoMutation
@@ -30,6 +32,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
     private lateinit var getMyTodosQuery: GetMyTodosQuery
     private lateinit var addTodoMutation: AddTodoMutation
     private lateinit var toggleTodoMutation: ToggleTodoMutation
+    private lateinit var removeTodoMutation: RemoveTodoMutation
 
     private var completeStatus: String? = null
 
@@ -213,19 +216,43 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
         getMyTodosQueryLocal()
 
         // Apollo runs query on background thread
-        Network.apolloClient.mutate(toggleTodoMutation)?.enqueue(object : ApolloCall.Callback<ToggleTodoMutation.Data>() {
-            override fun onFailure(error: ApolloException) {
-                Log.d("Todo", error.toString() )
-            }
-            override fun onResponse(response: Response<ToggleTodoMutation.Data>) {
-                Network.apolloClient.apolloStore.write(toggleTodoMutation, response.data()!!)
-                getMyTodosQueryLocal()
-            }
-        })
+        Network.apolloClient.mutate(toggleTodoMutation)
+            ?.enqueue(object : ApolloCall.Callback<ToggleTodoMutation.Data>() {
+                override fun onFailure(error: ApolloException) {
+                    Log.d("Todo", error.toString())
+                }
+
+                override fun onResponse(response: Response<ToggleTodoMutation.Data>) {
+                    Network.apolloClient.apolloStore.write(toggleTodoMutation, response.data()!!)
+                    getMyTodosQueryLocal()
+                }
+            })
     }
 
     override fun updateTaskCompleteStatus(taskId: Int, completeFlag: Boolean) {
         toggleTodoMutationCloud(taskId, completeFlag)
+    }
+
+    private fun removeTodoMutationCloud(todoId: Int) {
+        // Init Query
+        removeTodoMutation = RemoveTodoMutation(id = todoId)
+        // Apollo runs query on background thread
+        Network.apolloClient.mutate(removeTodoMutation)
+            ?.enqueue(object : ApolloCall.Callback<RemoveTodoMutation.Data>() {
+                override fun onFailure(error: ApolloException) {
+                    Log.d("Todo", error.toString())
+                }
+
+                override fun onResponse(response: Response<RemoveTodoMutation.Data>) {
+                    // get data from local cache and update the list
+                    val index = listItems.indexOfFirst { todo -> todo.id == todoId }
+                    val todos = (listItems.toMutableList()).removeAt(index)
+                    Network.apolloClient.apolloStore
+                        .write(GetMyTodosQuery(), GetMyTodosQuery.Data(mutableListOf(todos)))
+                        .execute()
+                    getMyTodosQueryLocal()
+                }
+            })
     }
 
     fun addTodo(title: String) {
@@ -233,7 +260,7 @@ class TaskFragment : Fragment(), TaskAdapter.TaskItemClickListener {
     }
 
     override fun delete(taskId: Int) {
-        // Todo : Method for deleting a task
+        removeTodoMutationCloud(todoId = taskId)
     }
 
     private fun removeAllCompleted() {
